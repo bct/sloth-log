@@ -3,3 +3,9 @@ Tags: sample test
 # Sample Entry #
 
 This is a sample entry. Feel free to delete it.
+
+All entries are processed using [Maruku][], an enhanced version of
+[Markdown][].
+
+[Maruku]: http://maruku.rubyforge.org/
+[Markdown]: http://daringfireball.net/projects/markdown/
