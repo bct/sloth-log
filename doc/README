@@ -1,0 +1,6 @@
+## HOWTO ##
+
+Entries go in /entries. They are formatted using Markdown ([Maruku][]'s
+variant).
+
+[Maruku]: http://maruku.rubyforge.org/
