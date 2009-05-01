@@ -6,6 +6,10 @@ require 'maruku'
 require 'atom/feed'
 require 'atom/entry'
 
+class Atom::Entry
+  attrb ['ibes', 'http://necronomicorp.com/ns/ibes'], 'slug'
+end
+
 require 'yaml'
 
 CONF_FILE = 'config.yaml'
@@ -23,6 +27,9 @@ output directory: ./output/
 #  name: The Author
 #  uri: http://example.org/
 #  email: author@example.org
+
+# string to be prefixed to an entry's local path to create an ID URL
+#id prefix: http://example.org/
 
 entries per page: 10
 END
@@ -56,9 +63,11 @@ end
 def maruku_to_atom(mrk)
   e = Atom::Entry.new
 
-  e.tag_with mrk.attributes[:tags]
+  e.slug      = mrk.attributes[:slug]
+  e.id        = Conf['id prefix'] + mrk.attributes[:slug]
   e.title     = mrk.attributes[:title]
   e.updated   = mrk.attributes[:updated]
+  e.tag_with mrk.attributes[:tags]
 
   if mrk.attributes[:author]
     e.authors.new :name => mrk.attributes[:author]
@@ -69,14 +78,13 @@ def maruku_to_atom(mrk)
   e
 end
 
-def paginate(entries)
-  # paginate entries, 10 per page
+def paginate(entries, per_page)
   pages = []
   page = []
   entries.each do |mtime,file|
     page << [mtime,file]
 
-    if page.length == 10
+    if page.length == per_page
       page.reverse # newest first
       pages << page
       page = []
@@ -107,6 +115,12 @@ def write_page(feed, path)
   # set access and modification times to feed updated time
   File.utime(feed.updated, feed.updated, fname + '.atom')
 
+  require 'xml/xslt'
+
+  xslt = XML::XSLT.new
+  xslt.xsl = './xsl/xhtml.xsl'
+  xslt.xml = fname + '.atom'
+  puts xslt.serve
 end
 
 def write_output
@@ -115,13 +129,14 @@ def write_output
     mrk = Maruku.new(File.read(file))
 
     mtime = File.mtime(file)
+    mrk.attributes[:slug] = file.sub(/#{ENTRIES_DIR}\//, '')
     mrk.attributes[:updated] = mtime
 
     [mtime, mrk]
   end.sort
 
-  # the newest 10 entries
-  front_page = entries.last(10).reverse
+  # the newest entries
+  front_page = entries.last(Conf['entries per page']).reverse
   fp_feed = Atom::Feed.new
 
   front_page.each do |mtime,mrk|
