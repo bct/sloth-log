@@ -16,15 +16,13 @@
   indent="yes"
 	encoding="UTF-8" />
 
-<!-- the lowest allowable n for <hn/>s converted from <h>s -->
-<!-- h1 is a story title, h2 are subheadings -->
-<xsl:param name="min-heading" select="2"/>
+<xsl:param name="title"/>
 
 <!-- the basic skeleton -->
 <xsl:template match="/">
 	<html>
 	<head>
-    <title>[title]</title>
+    <title><xsl:value-of select="$title"/></title>
 	</head>
 	<!-- this should be elsewhere -->
 	<body>
@@ -38,7 +36,7 @@
 </xsl:template>
 
 <xsl:template name="header">
-  <strong><a href="">[title]</a></strong>
+  <strong><a href=""><xsl:value-of select="$title"/></a></strong>
   <div id="sections" class="tabs">
     <a href="">about</a>
     <a href="" class="feed">feed</a>
@@ -108,31 +106,6 @@
       <xsl:value-of select="text()"/>
     </a>
   </h1>
-</xsl:template>
-
-<!-- XHTML 2 -->
-<xsl:template match="section">
-	<xsl:apply-templates select="node()|text()|@*"/>
-</xsl:template>
-
-<!-- XHTML 2 -->
-<xsl:template match="h">
-	<xsl:variable name="level">
-		<xsl:value-of select="count(ancestor::section) + $min-heading"/>
-	</xsl:variable>
-<!-- i should test that min-heading is changeable for comments and such. XXX -->
-	<xsl:choose>
-		<xsl:when test="$level > 6">
-			<strong>
-				<xsl:apply-templates select="@* | node()"/>
-			</strong>
-		</xsl:when>
-		<xsl:otherwise>
-			<xsl:element name="{concat('h',$level)}">
-				<xsl:apply-templates select="@* | node()"/>
-			</xsl:element>
-		</xsl:otherwise>
-	</xsl:choose>
 </xsl:template>
 
 <xsl:template match="l">

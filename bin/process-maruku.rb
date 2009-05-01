@@ -28,6 +28,9 @@ output directory: ./output/
 #  uri: http://example.org/
 #  email: author@example.org
 
+# system-wide blog title
+title: (configure me)
+
 # string to be prefixed to an entry's local path to create an ID URL
 #id prefix: http://example.org/
 
@@ -120,6 +123,8 @@ def write_page(feed, path)
   xslt = XML::XSLT.new
   xslt.xsl = './xsl/xhtml.xsl'
   xslt.xml = fname + '.atom'
+
+  xslt.parameters = {'title' => Conf['title']}
   puts xslt.serve
 end
 
