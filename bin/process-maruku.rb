@@ -18,27 +18,27 @@ ENTRIES_DIR = './entries'
 def write_default_config_file
   File.open(CONF_FILE, 'w') do |f|
     f.write <<END
-# directory to save output files to
+# directory to save output files to (required)
 output directory: ./output/
 
-# system-wide author details - please fill in at least the name.
+# HTTP path that this will all be accessible under (required)
+http root:
+
+# this is prefixed to each entry's slug to create an ID URL (required)
+#id prefix: http://example.org/
+
+# system-wide blog title
+title: (configure me)
+
+# system-wide author details - good idea to fill in at least the name.
 # (you can also give per-entry author names with the Author attribute)
 #author:
 #  name: The Author
 #  uri: http://example.org/
 #  email: author@example.org
 
-# system-wide blog title
-title: (configure me)
-
-# HTTP path to the generate index.html
-http root:
-
 # URL of stylesheet to use
 #css url:
-
-# string to be prefixed to an entry's local path to create an ID URL
-#id prefix: http://example.org/
 
 entries per page: 10
 END
@@ -54,6 +54,10 @@ def load_config
 end
 
 require 'rexml/xpath'
+
+def url(*args)
+  Conf['http root'] + '/' + args.join('/')
+end
 
 # fill an Atom::Entry's content in from a REXML HTML tree
 def html_to_atom_content(html_tree, atom_entry)
@@ -90,18 +94,17 @@ end
 def paginate(entries, per_page)
   pages = []
   page = []
-  entries.each do |mtime,file|
-    page << [mtime,file]
+
+  entries.each do |e|
+    page << e
 
     if page.length == per_page
-      page.reverse # newest first
       pages << page
       page = []
     end
   end
 
   unless page.empty?
-    page.reverse  # newest first
     pages << page
   end
 
@@ -158,8 +161,14 @@ def transform_and_write(atom, slug, reprs = ['atom', 'xhtml'])
   end
 
   if reprs.member? 'xhtml'
-    File.open(fname + '.html', 'w') do |f|
+    File.open(fname + '.xhtml', 'w') do |f|
       f.write $xslt.transform('xhtml', xml)
+    end
+
+    File.utime(atom.updated, atom.updated, fname + '.xhtml')
+
+    File.open(fname + '.html', 'w') do |f|
+      f.write $xslt.transform('xhtml2html', fname + '.xhtml')
     end
 
     File.utime(atom.updated, atom.updated, fname + '.html')
@@ -176,6 +185,7 @@ def get_entries(dir)
     mrk.attributes[:updated] = mtime
 
     entry = maruku_to_atom(mrk)
+    entry.links.new :href => url(entry.slug) # alternate link
 
     [mtime, entry]
   end
@@ -185,6 +195,7 @@ def get_entries(dir)
     mtime = entry.updated
 
     entry.slug = File.basename(file)
+    entry.links.new :href => url(entry.slug) # alternate link
 
     [mtime, entry]
   end
@@ -199,7 +210,7 @@ def write_entry_pages(entries)
   end
 end
 
-def write_front_page(entries)
+def write_front_page(entries, next_page_href)
   # the newest entries
   front_page = entries.last(Conf['entries per page']).reverse
   fp_feed = Atom::Feed.new
@@ -210,7 +221,38 @@ def write_front_page(entries)
   end
 
   fp_feed.updated = front_page.first.updated
+  fp_feed.links.new :rel => 'prev-archive',
+                    :href => next_page_href
+
   transform_and_write(fp_feed, 'index')
+end
+
+def write_archives(pages)
+  pages.each_with_index do |entries,i|
+    p_feed = Atom::Feed.new
+    p_feed.title = Conf['title'] + " (page #{i})"
+
+    entries.reverse.each do |entry|
+      p_feed << entry
+    end
+
+    p_feed.updated = entries.first.updated
+
+    p_feed.links.new :rel => 'current',
+                      :href => url('index')
+
+    unless i == 0
+      p_feed.links.new :rel => 'prev-archive',
+                        :href => url('p', i-1)
+    end
+
+    unless i == (pages.length - 1)
+      p_feed.links.new :rel => 'next-archive',
+                        :href => url('p', i+1)
+    end
+
+    transform_and_write(p_feed, "p/#{i}")
+  end
 end
 
 if __FILE__ == $0
@@ -218,5 +260,9 @@ if __FILE__ == $0
 
   entries = get_entries(ENTRIES_DIR)
   write_entry_pages(entries)
-  write_front_page(entries)
+
+  pages = paginate(entries, Conf['entries per page'])
+  write_archives(pages)
+
+  write_front_page(entries, url('p', pages.length-1))
 end

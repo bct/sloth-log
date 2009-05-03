@@ -31,11 +31,15 @@
 		<div id="header"><xsl:call-template name="header"/></div>
     <div id="content">
       <xsl:apply-templates select="//atom:entry"/>
+      <xsl:if test="name(/*)='feed'">
+        <xsl:call-template name="prev-next"/>
+      </xsl:if>
     </div>
 	</body>
 	</html>
 </xsl:template>
 
+<!-- top-level templates (called from match="/") -->
 <xsl:template name="html-head">
   <title><xsl:call-template name="title"/></title>
   <xsl:if test="$css-url">
@@ -73,6 +77,22 @@
   </div>
 </xsl:template>
 
+<xsl:template name="prev-next">
+  <div class="prev-next block">
+    <xsl:variable name="prev" select="/*/atom:link[@rel='prev-archive']"/>
+    <xsl:variable name="next" select="/*/atom:link[@rel='next-archive']"/>
+
+    <xsl:if test="$prev">
+      <a href="{$prev/@href}">← older entries</a>
+    </xsl:if>
+
+    <xsl:if test="$next">
+      <a href="{$next/@href}">newer entries →</a>
+    </xsl:if>
+  </div>
+</xsl:template>
+
+<!-- entry-level stuff -->
 <xsl:template match="atom:content[@type='text']|atom:content[not(@type)]|atom:summary[@type='text']|atom:summary[not(@type)]">
   <div class="content text block">
     <xsl:apply-templates/>
