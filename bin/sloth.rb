@@ -11,57 +11,6 @@ class Atom::Entry
 end
 
 #
-# ----- configuration -----
-#
-require 'yaml'
-
-CONF_FILE = 'config.yaml'
-
-def write_default_config_file
-  File.open(CONF_FILE, 'w') do |f|
-    f.write <<END
-# directory to save output files to (required)
-output directory: ./output/
-
-# directory to get input files from (required)
-maruku directory: ./entries/ # maruku files
-atom directory: ./atom/      # XML Atom entries
-
-# HTTP path that this will all be accessible under (required)
-http root:
-
-# this is prefixed to each entry's slug to create an ID URL (required)
-#id prefix: http://example.org/
-
-# system-wide blog title
-title: (configure me)
-
-# system-wide author details - good idea to fill in at least the name.
-# (you can also give per-entry author names with the Author attribute)
-#author:
-#  name: The Author
-#  uri: http://example.org/
-#  email: author@example.org
-
-# URL of stylesheet to use
-#css url:
-
-entries per page: 10
-END
-  end
-end
-
-def load_config
-  unless File.file? CONF_FILE
-    write_default_config_file
-    puts "config.yaml created. you have to edit it before this will work."
-    exit
-  end
-
-  YAML.load(File.read(CONF_FILE))
-end
-
-#
 # ----- maruku/atom conversion -----
 #
 
@@ -177,17 +126,19 @@ end
 # this class controls the loading, conversion and output
 class Entries
   def initialize(maruku_dir, atom_dir)
-    @es = get_entries(maruku_dir, atom_dir)
+    @es = []
+    get_maruku_entries(maruku_dir) if maruku_dir
+    get_atom_entries(atom_dir)     if atom_dir
+    @es.sort_by { |e| e.updated }
 
     @pages = paginate(Conf['entries per page'])
 
     @out = Outputter.new
   end
 
-  # get a list of entries sorted by modification time, oldest first
-  def get_entries(maruku_dir, atom_dir)
-    # load maruku entries
-    m = Dir[maruku_dir + '/*'].map do |file|
+  # load maruku entries
+  def get_maruku_entries(maruku_dir)
+    Dir[maruku_dir + '/*'].each do |file|
       mrk = Maruku.new(File.read(file))
 
       mrk.attributes[:slug] = file.sub(/#{maruku_dir}\//, '')
@@ -196,20 +147,20 @@ class Entries
       entry = maruku_to_atom(mrk)
       entry.links.new :href => url(entry.slug) # alternate link
 
-      entry
+      @es << entry
     end
+  end
 
+  def get_atom_entries(maruku_dir, atom_dir)
     # load XML Atom entries
-    a = Dir[atom_dir + '/*'].map do |file|
+    Dir[atom_dir + '/*'].each do |file|
       entry = Atom::Entry.parse(File.read(file))
 
       entry.slug = File.basename(file)
       entry.links.new :href => url(entry.slug) # alternate link
 
-      entry
+      @es << entry
     end
-
-    (m+a).sort_by { |e| e.updated }
   end
 
   def paginate(per_page)
@@ -285,7 +236,14 @@ class Entries
 end
 
 if __FILE__ == $0
-  Conf = load_config
+  require 'yaml'
+
+  Conf = YAML.load(File.read('config.yaml'))
+
+  if Conf['UNEDITED']
+    puts "you haven't edited config.yaml yet, naughty naughty."
+    exit
+  end
 
   e = Entries.new(Conf['maruku directory'], Conf['atom directory'])
   e.write_entry_pages

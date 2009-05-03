@@ -1,0 +1,31 @@
+# you need to delete the following line before the program will run.
+UNEDITED: true
+
+# directory to save output files to (required)
+output directory: ./output/
+
+# directory to get input files from
+# (you can comment out the line if you don't want it)
+maruku directory: ./entries/ # maruku files
+atom directory: ./atom/      # XML Atom entries
+
+# HTTP path that this will all be accessible under (required)
+#http root: /sloth
+
+# this is prefixed to each entry's slug to create an ID URL (required)
+#id prefix: http://example.org/
+
+# system-wide blog title
+title: (configure me)
+
+# system-wide author details - good idea to fill in at least the name.
+# (you can also give per-entry author names with the Author attribute)
+#author:
+#  name: The Author
+#  uri: http://example.org/
+#  email: author@example.org
+
+# URL of stylesheet to use
+#css url:
+
+entries per page: 10
