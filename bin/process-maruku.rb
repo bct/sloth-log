@@ -167,116 +167,118 @@ end
 # ----- determining what goes into a feed -----
 #
 
-def url(*args)
-  Conf['http root'] + '/' + args.join('/')
-end
+class Entries
+  def initialize(maruku_dir, atom_dir)
+    @es = get_entries(maruku_dir, atom_dir)
 
-# get a list of entries sorted by modification time, oldest first
-def get_entries(maruku_dir, atom_dir)
-  m = Dir[maruku_dir + '/*'].map do |file|
-    mrk = Maruku.new(File.read(file))
-
-    mrk.attributes[:slug] = file.sub(/#{maruku_dir}\//, '')
-    mrk.attributes[:updated] = File.mtime(file)
-
-    entry = maruku_to_atom(mrk)
-    entry.links.new :href => url(entry.slug) # alternate link
-
-    entry
+    @pages = paginate(Conf['entries per page'])
   end
 
-  a = Dir[atom_dir + '/*'].map do |file|
-    entry = Atom::Entry.parse(File.read(file))
+  # get a list of entries sorted by modification time, oldest first
+  def get_entries(maruku_dir, atom_dir)
+    # load maruku entries
+    m = Dir[maruku_dir + '/*'].map do |file|
+      mrk = Maruku.new(File.read(file))
 
-    entry.slug = File.basename(file)
-    entry.links.new :href => url(entry.slug) # alternate link
+      mrk.attributes[:slug] = file.sub(/#{maruku_dir}\//, '')
+      mrk.attributes[:updated] = File.mtime(file)
 
-    entry
+      entry = maruku_to_atom(mrk)
+      entry.links.new :href => url(entry.slug) # alternate link
+
+      entry
+    end
+
+    # load XML Atom entries
+    a = Dir[atom_dir + '/*'].map do |file|
+      entry = Atom::Entry.parse(File.read(file))
+
+      entry.slug = File.basename(file)
+      entry.links.new :href => url(entry.slug) # alternate link
+
+      entry
+    end
+
+    (m+a).sort_by { |e| e.updated }
   end
 
-  (m+a).sort_by { |e| e.updated }
-end
+  def paginate(per_page)
+    pages = []
+    page = []
 
-def paginate(entries, per_page)
-  pages = []
-  page = []
+    @es.each do |e|
+      page << e
 
-  entries.each do |e|
-    page << e
+      if page.length == per_page
+        pages << page
+        page = []
+      end
+    end
 
-    if page.length == per_page
+    unless page.empty?
       pages << page
-      page = []
+    end
+
+    pages
+  end
+
+  def write_entry_pages
+    # write individual entry pages
+    @es.each do |entry|
+      transform_and_write(entry, entry.slug, ['xhtml'])
     end
   end
 
-  unless page.empty?
-    pages << page
+  def write_front_page
+    front_page = @es.last(Conf['entries per page']).reverse
+
+    fp_feed = make_feed(front_page)
+    fp_feed.title = Conf['title']
+
+    fp_feed.links.new :rel => 'prev-archive',
+                      :href => url('p', @pages.length-1)
+
+    transform_and_write(fp_feed, 'index')
   end
 
-  pages
-end
+  def write_archives
+    @pages.each_with_index do |entries,i|
+      p_feed = make_feed(entries.reverse)
+      p_feed.title = Conf['title'] + " (page #{i})"
+      p_feed.links.new :rel => 'current',
+                        :href => url('index')
 
-def write_entry_pages(entries)
-  # write individual entry pages
-  entries.each do |entry|
-    transform_and_write(entry, entry.slug, ['xhtml'])
+      unless i == 0
+        p_feed.links.new :rel => 'prev-archive',
+                          :href => url('p', i-1)
+      end
+
+      unless i == (@pages.length - 1)
+        p_feed.links.new :rel => 'next-archive',
+                          :href => url('p', i+1)
+      end
+
+      transform_and_write(p_feed, "p/#{i}")
+    end
   end
-end
 
-def write_front_page(entries, next_page_href)
-  # the newest entries
-  front_page = entries.last(Conf['entries per page']).reverse
-  fp_feed = Atom::Feed.new
-  fp_feed.title = Conf['title']
-
-  front_page.each do |entry|
-    fp_feed << entry
+  def url(*args)
+    Conf['http root'] + '/' + args.join('/')
   end
 
-  fp_feed.updated = front_page.first.updated
-  fp_feed.links.new :rel => 'prev-archive',
-                    :href => next_page_href
-
-  transform_and_write(fp_feed, 'index')
-end
-
-def write_archives(pages)
-  pages.each_with_index do |entries,i|
-    p_feed = Atom::Feed.new
-    p_feed.title = Conf['title'] + " (page #{i})"
-
-    entries.reverse.each do |entry|
-      p_feed << entry
-    end
-
-    p_feed.updated = entries.first.updated
-
-    p_feed.links.new :rel => 'current',
-                      :href => url('index')
-
-    unless i == 0
-      p_feed.links.new :rel => 'prev-archive',
-                        :href => url('p', i-1)
-    end
-
-    unless i == (pages.length - 1)
-      p_feed.links.new :rel => 'next-archive',
-                        :href => url('p', i+1)
-    end
-
-    transform_and_write(p_feed, "p/#{i}")
+  def make_feed(entries)
+    feed = Atom::Feed.new
+    entries.each { |entry| feed << entry }
+    feed.updated = entries.first.updated # here we assume newest is first
+    feed
   end
 end
 
 if __FILE__ == $0
   Conf = load_config
 
-  entries = get_entries(Conf['maruku directory'], Conf['atom directory'])
-  write_entry_pages(entries)
-
-  pages = paginate(entries, Conf['entries per page'])
-  write_archives(pages)
-
-  write_front_page(entries, url('p', pages.length-1))
+  e = Entries.new(Conf['maruku directory'], Conf['atom directory'])
+  e.write_entry_pages
+  e.write_archives
+  e.write_front_page
 end
