@@ -102,9 +102,11 @@ end
 #
 
 require 'xml/xslt'
-class XSLTer
+
+# transformations and actual output
+class Outputter
   def initialize
-    @xslt = XML::XSLT.new
+    @x = XML::XSLT.new
   end
 
   # this needs to be done this way (with the dups) because ruby-xslt is a bit goofy
@@ -122,44 +124,46 @@ class XSLTer
     ps
   end
 
-  def transform(stylesheet, xml)
-    @xslt.parameters = get_params()
-    @xslt.xsl = "./xsl/#{stylesheet}.xsl"
-    @xslt.xml = xml
-    @xslt.serve
-  end
-end
-
-$xslt = XSLTer.new
-
-def write_path(fname, mtime, data)
-  File.open(fname, 'w') do |f|
-    f.write data
+  def transform(xml, stylesheet)
+    @x.parameters = get_params()
+    @x.xsl = "./xsl/#{stylesheet}.xsl"
+    @x.xml = xml
+    @x.serve
   end
 
-  File.utime(mtime, mtime, fname)
-end
+  # write 'data' to 'fname' with modification time 'mtime'
+  def write(fname, mtime, data)
+    File.open(fname, 'w') do |f|
+      f.write data
+    end
 
-def transform_and_write(atom, slug, reprs = ['atom', 'xhtml'])
-  fname = File.join(Conf['output directory'], slug)
-  outdir = File.dirname(fname)
-
-  unless File.directory?(outdir)
-    Dir.mkdir outdir
+    File.utime(mtime, mtime, fname)
   end
 
-  xml = atom.to_s
+  # 'atom' is an Atom::Feed or an Atom::Entry, it doesn't matter
+  # 'slug' is just a path relative to the output directory
+  # 'reprs' is a list of representations to be created
+  def do(atom, slug, reprs = ['atom', 'xhtml'])
+    fname = File.join(Conf['output directory'], slug)
+    outdir = File.dirname(fname)
 
-  if reprs.member? 'atom'
-    write_path(fname + '.atom', atom.updated, xml)
-  end
+    unless File.directory?(outdir)
+      Dir.mkdir outdir
+    end
 
-  if reprs.member? 'xhtml'
-    xhtml = $xslt.transform('xhtml', xml)
-    write_path(fname + '.xhtml', atom.updated, xhtml)
+    xml = atom.to_s
 
-    html = $xslt.transform('xhtml2html', xhtml)
-    write_path(fname + '.html', atom.updated, html)
+    if reprs.member? 'atom'
+      write(fname + '.atom', atom.updated, xml)
+    end
+
+    if reprs.member? 'xhtml'
+      xhtml = transform(xml, 'xhtml')
+      write(fname + '.xhtml', atom.updated, xhtml)
+
+      html = transform(xhtml, 'xhtml2html')
+      write(fname + '.html', atom.updated, html)
+    end
   end
 end
 
@@ -167,11 +171,15 @@ end
 # ----- determining what goes into a feed -----
 #
 
+# a collection of entries converted from `maruku dir` or parsed from `atom dir`
+# this class controls the loading, conversion and output
 class Entries
   def initialize(maruku_dir, atom_dir)
     @es = get_entries(maruku_dir, atom_dir)
 
     @pages = paginate(Conf['entries per page'])
+
+    @out = Outputter.new
   end
 
   # get a list of entries sorted by modification time, oldest first
@@ -225,7 +233,7 @@ class Entries
   def write_entry_pages
     # write individual entry pages
     @es.each do |entry|
-      transform_and_write(entry, entry.slug, ['xhtml'])
+      @out.do(entry, entry.slug, ['xhtml'])
     end
   end
 
@@ -238,7 +246,7 @@ class Entries
     fp_feed.links.new :rel => 'prev-archive',
                       :href => url('p', @pages.length-1)
 
-    transform_and_write(fp_feed, 'index')
+    @out.do(fp_feed, 'index')
   end
 
   def write_archives
@@ -258,7 +266,7 @@ class Entries
                           :href => url('p', i+1)
       end
 
-      transform_and_write(p_feed, "p/#{i}")
+      @out.do(p_feed, "p/#{i}")
     end
   end
 
