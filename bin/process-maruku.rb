@@ -10,16 +10,22 @@ class Atom::Entry
   attrb ['ibes', 'http://necronomicorp.com/ns/ibes'], 'slug'
 end
 
+#
+# ----- configuration -----
+#
 require 'yaml'
 
 CONF_FILE = 'config.yaml'
-ENTRIES_DIR = './entries'
 
 def write_default_config_file
   File.open(CONF_FILE, 'w') do |f|
     f.write <<END
 # directory to save output files to (required)
 output directory: ./output/
+
+# directory to get input files from (required)
+maruku directory: ./entries/ # maruku files
+atom directory: ./atom/      # XML Atom entries
 
 # HTTP path that this will all be accessible under (required)
 http root:
@@ -53,11 +59,11 @@ def load_config
   YAML.load(File.read(CONF_FILE))
 end
 
-require 'rexml/xpath'
+#
+# ----- maruku/atom conversion -----
+#
 
-def url(*args)
-  Conf['http root'] + '/' + args.join('/')
-end
+require 'rexml/xpath'
 
 # fill an Atom::Entry's content in from a REXML HTML tree
 def html_to_atom_content(html_tree, atom_entry)
@@ -91,25 +97,9 @@ def maruku_to_atom(mrk)
   e
 end
 
-def paginate(entries, per_page)
-  pages = []
-  page = []
-
-  entries.each do |e|
-    page << e
-
-    if page.length == per_page
-      pages << page
-      page = []
-    end
-  end
-
-  unless page.empty?
-    pages << page
-  end
-
-  pages
-end
+#
+# ----- output handling details -----
+#
 
 require 'xml/xslt'
 class XSLTer
@@ -142,6 +132,14 @@ end
 
 $xslt = XSLTer.new
 
+def write_path(fname, mtime, data)
+  File.open(fname, 'w') do |f|
+    f.write data
+  end
+
+  File.utime(mtime, mtime, fname)
+end
+
 def transform_and_write(atom, slug, reprs = ['atom', 'xhtml'])
   fname = File.join(Conf['output directory'], slug)
   outdir = File.dirname(fname)
@@ -153,54 +151,70 @@ def transform_and_write(atom, slug, reprs = ['atom', 'xhtml'])
   xml = atom.to_s
 
   if reprs.member? 'atom'
-    File.open(fname + '.atom', 'w') do |f|
-      f.write xml
-    end
-
-    File.utime(atom.updated, atom.updated, fname + '.atom')
+    write_path(fname + '.atom', atom.updated, xml)
   end
 
   if reprs.member? 'xhtml'
-    File.open(fname + '.xhtml', 'w') do |f|
-      f.write $xslt.transform('xhtml', xml)
-    end
+    xhtml = $xslt.transform('xhtml', xml)
+    write_path(fname + '.xhtml', atom.updated, xhtml)
 
-    File.utime(atom.updated, atom.updated, fname + '.xhtml')
-
-    File.open(fname + '.html', 'w') do |f|
-      f.write $xslt.transform('xhtml2html', fname + '.xhtml')
-    end
-
-    File.utime(atom.updated, atom.updated, fname + '.html')
+    html = $xslt.transform('xhtml2html', xhtml)
+    write_path(fname + '.html', atom.updated, html)
   end
 end
 
+#
+# ----- determining what goes into a feed -----
+#
+
+def url(*args)
+  Conf['http root'] + '/' + args.join('/')
+end
+
 # get a list of entries sorted by modification time, oldest first
-def get_entries(dir)
-  m = Dir[dir + '/*'].map do |file|
+def get_entries(maruku_dir, atom_dir)
+  m = Dir[maruku_dir + '/*'].map do |file|
     mrk = Maruku.new(File.read(file))
 
-    mtime = File.mtime(file)
-    mrk.attributes[:slug] = file.sub(/#{dir}\//, '')
-    mrk.attributes[:updated] = mtime
+    mrk.attributes[:slug] = file.sub(/#{maruku_dir}\//, '')
+    mrk.attributes[:updated] = File.mtime(file)
 
     entry = maruku_to_atom(mrk)
     entry.links.new :href => url(entry.slug) # alternate link
 
-    [mtime, entry]
+    entry
   end
 
-  a = Dir['./atom/*'].map do |file|
+  a = Dir[atom_dir + '/*'].map do |file|
     entry = Atom::Entry.parse(File.read(file))
-    mtime = entry.updated
 
     entry.slug = File.basename(file)
     entry.links.new :href => url(entry.slug) # alternate link
 
-    [mtime, entry]
+    entry
   end
 
-  (m+a).sort.map { |m,e| e }
+  (m+a).sort_by { |e| e.updated }
+end
+
+def paginate(entries, per_page)
+  pages = []
+  page = []
+
+  entries.each do |e|
+    page << e
+
+    if page.length == per_page
+      pages << page
+      page = []
+    end
+  end
+
+  unless page.empty?
+    pages << page
+  end
+
+  pages
 end
 
 def write_entry_pages(entries)
@@ -258,7 +272,7 @@ end
 if __FILE__ == $0
   Conf = load_config
 
-  entries = get_entries(ENTRIES_DIR)
+  entries = get_entries(Conf['maruku directory'], Conf['atom directory'])
   write_entry_pages(entries)
 
   pages = paginate(entries, Conf['entries per page'])
