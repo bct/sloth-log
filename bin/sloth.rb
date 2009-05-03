@@ -54,6 +54,8 @@ end
 def load_config
   unless File.file? CONF_FILE
     write_default_config_file
+    puts "config.yaml created. you have to edit it before this will work."
+    exit
   end
 
   YAML.load(File.read(CONF_FILE))
