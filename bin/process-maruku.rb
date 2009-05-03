@@ -31,6 +31,12 @@ output directory: ./output/
 # system-wide blog title
 title: (configure me)
 
+# HTTP path to the generate index.html
+http root:
+
+# URL of stylesheet to use
+#css url:
+
 # string to be prefixed to an entry's local path to create an ID URL
 #id prefix: http://example.org/
 
@@ -102,57 +108,116 @@ def paginate(entries, per_page)
   pages
 end
 
+require 'xml/xslt'
+class XSLTer
+  def initialize
+    @xslt = XML::XSLT.new
+  end
 
-def write_page(feed, path)
-  fname = File.join(Conf['output directory'], path)
+  # this needs to be done this way (with the dups) because ruby-xslt is a bit goofy
+  # (it's probably my fault, hopefully i can fix that)
+  def get_params
+    ps = {
+      'blog-title' => Conf['title'].dup,
+      'http-root' => Conf['http root'].dup
+    }
+
+    if Conf['css url']
+      ps['css-url'] = Conf['css url'].dup
+    end
+
+    ps
+  end
+
+  def transform(stylesheet, xml)
+    @xslt.parameters = get_params()
+    @xslt.xsl = "./xsl/#{stylesheet}.xsl"
+    @xslt.xml = xml
+    @xslt.serve
+  end
+end
+
+$xslt = XSLTer.new
+
+def transform_and_write(atom, slug, reprs = ['atom', 'xhtml'])
+  fname = File.join(Conf['output directory'], slug)
   outdir = File.dirname(fname)
 
   unless File.directory?(outdir)
     Dir.mkdir outdir
   end
 
-  File.open(fname + '.atom', 'w') do |f|
-    f.write feed
+  xml = atom.to_s
+
+  if reprs.member? 'atom'
+    File.open(fname + '.atom', 'w') do |f|
+      f.write xml
+    end
+
+    File.utime(atom.updated, atom.updated, fname + '.atom')
   end
 
-  # set access and modification times to feed updated time
-  File.utime(feed.updated, feed.updated, fname + '.atom')
+  if reprs.member? 'xhtml'
+    File.open(fname + '.html', 'w') do |f|
+      f.write $xslt.transform('xhtml', xml)
+    end
 
-  require 'xml/xslt'
-
-  xslt = XML::XSLT.new
-  xslt.xsl = './xsl/xhtml.xsl'
-  xslt.xml = fname + '.atom'
-
-  xslt.parameters = {'title' => Conf['title']}
-  puts xslt.serve
+    File.utime(atom.updated, atom.updated, fname + '.html')
+  end
 end
 
-def write_output
-  # get a list of entries sorted by modification time, oldest first
-  entries = Dir[ENTRIES_DIR + '/*'].map do |file|
+# get a list of entries sorted by modification time, oldest first
+def get_entries(dir)
+  m = Dir[dir + '/*'].map do |file|
     mrk = Maruku.new(File.read(file))
 
     mtime = File.mtime(file)
-    mrk.attributes[:slug] = file.sub(/#{ENTRIES_DIR}\//, '')
+    mrk.attributes[:slug] = file.sub(/#{dir}\//, '')
     mrk.attributes[:updated] = mtime
 
-    [mtime, mrk]
-  end.sort
+    entry = maruku_to_atom(mrk)
 
+    [mtime, entry]
+  end
+
+  a = Dir['./atom/*'].map do |file|
+    entry = Atom::Entry.parse(File.read(file))
+    mtime = entry.updated
+
+    puts entry.to_s if entry.slug
+    entry.slug = File.basename(file)
+
+    [mtime, entry]
+  end
+
+  (m+a).sort.map { |m,e| e }
+end
+
+def write_entry_pages(entries)
+  # write individual entry pages
+  entries.each do |entry|
+    transform_and_write(entry, entry.slug, ['xhtml'])
+  end
+end
+
+def write_front_page(entries)
   # the newest entries
   front_page = entries.last(Conf['entries per page']).reverse
   fp_feed = Atom::Feed.new
+  fp_feed.title = Conf['title']
 
-  front_page.each do |mtime,mrk|
-    fp_feed << maruku_to_atom(mrk)
+  front_page.each do |entry|
+    fp_feed << entry
   end
 
-  fp_feed.updated = front_page.first[0]
-  write_page(fp_feed, 'index')
+  fp_feed.updated = front_page.first.updated
+  transform_and_write(fp_feed, 'index')
 end
 
 if __FILE__ == $0
   Conf = load_config
-  write_output
+
+  entries = get_entries(ENTRIES_DIR)
+  write_entry_pages(entries)
+  write_front_page(entries)
 end
