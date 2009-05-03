@@ -127,12 +127,6 @@
 
     <xsl:apply-templates select="atom:updated"/>
 
-    <xsl:if test="atom:link[@rel='trackback']">
-      <xsl:text> ┄  </xsl:text>
-
-      tbs: <xsl:value-of select="count(atom:link[@rel='trackback'])"/>
-    </xsl:if>
-
     <xsl:text> ┄  </xsl:text>
 
     <xsl:call-template name="tags"/>
