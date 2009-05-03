@@ -1,4 +1,4 @@
-<xsl:stylesheet 
+<xsl:stylesheet
 	xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
 	xmlns:math="http://exslt.org/math"
 	xmlns:atom="http://www.w3.org/2005/Atom"
@@ -16,13 +16,15 @@
   indent="yes"
 	encoding="UTF-8" />
 
-<xsl:param name="title"/>
+<xsl:param name="blog-title"/>
+<xsl:param name="http-root"/>
+<xsl:param name="css-url"/>
 
 <!-- the basic skeleton -->
 <xsl:template match="/">
 	<html>
 	<head>
-    <title><xsl:value-of select="$title"/></title>
+    <xsl:call-template name="html-head"/>
 	</head>
 	<!-- this should be elsewhere -->
 	<body>
@@ -30,16 +32,31 @@
     <div id="content">
       <xsl:apply-templates select="//atom:entry"/>
     </div>
-		<div id="links" class="yui-g">links</div>
 	</body>
 	</html>
 </xsl:template>
 
+<xsl:template name="html-head">
+  <title><xsl:call-template name="title"/></title>
+  <xsl:if test="$css-url">
+    <link rel="stylesheet" type="text/css" href="{$css-url}"/>
+  </xsl:if>
+  <link rel="alternate feed" type="application/atom+xml" href="{$http-root}/index.atom"/>
+</xsl:template>
+
+<xsl:template name="title">
+  <xsl:choose>
+    <xsl:when test="name(/*)='entry'">
+      <xsl:value-of select="/*/atom:title"/> : <xsl:value-of select="$blog-title"/>
+    </xsl:when>
+    <xsl:otherwise><xsl:value-of select="/*/atom:title"/></xsl:otherwise>
+  </xsl:choose>
+</xsl:template>
+
 <xsl:template name="header">
-  <strong><a href=""><xsl:value-of select="$title"/></a></strong>
+  <strong><a href="{$http-root}/"><xsl:value-of select="$blog-title"/></a></strong>
   <div id="sections" class="tabs">
-    <a href="">about</a>
-    <a href="" class="feed">feed</a>
+    <a href="{$http-root}/index.atom" class="feed">feed</a>
   </div>
   <div class="clear"/>
 </xsl:template>
@@ -54,16 +71,6 @@
 
     <xsl:call-template name="item-info"/>
   </div>
-
-  <xsl:if test="atom:link[@rel='trackback']">
-    <ul>
-      <xsl:apply-templates select="atom:link[@rel='trackback']"/>
-    </ul>
-  </xsl:if>
-</xsl:template>
-
-<xsl:template match="atom:link[@rel='trackback']">
-  <li><a href="{@href}"><xsl:value-of select="@title"/></a></li>
 </xsl:template>
 
 <xsl:template match="atom:content[@type='text']|atom:content[not(@type)]|atom:summary[@type='text']|atom:summary[not(@type)]">
@@ -101,20 +108,18 @@
 </xsl:template>
 
 <xsl:template match="atom:title">
-  <h1 class="entry-title">
-    <a href="">
-      <xsl:value-of select="text()"/>
-    </a>
-  </h1>
-</xsl:template>
-
-<xsl:template match="l">
-	<xsl:apply-templates/><xsl:if test="not(position()=last())"><br/></xsl:if>
+  <xsl:if test="./node()"><!-- don't output empty titles -->
+    <h1 class="entry-title">
+      <a href="{$http-root}/{../@ibes:slug}.html">
+        <xsl:value-of select="text()"/>
+      </a>
+    </h1>
+  </xsl:if>
 </xsl:template>
 
 <xsl:template name="item-info">
 	<div class="entrymeta">
-    <a rel="bookmark" href="">
+    <a rel="bookmark" href="{$http-root}/{@ibes:slug}.html">
       #<xsl:value-of select="@ibes:slug"/>
     </a>
 
@@ -137,7 +142,7 @@
 <xsl:template name="tags">
 	<span class="tags">
     <xsl:for-each select="atom:category/@term">
-      <a href="" rel="tag"><xsl:value-of select="."/></a><xsl:if test="not(position()=last())"> ∩ </xsl:if>
+      <xsl:value-of select="."/><xsl:if test="not(position()=last())"> ∩ </xsl:if>
 		</xsl:for-each>
 	</span>
 </xsl:template>
@@ -145,7 +150,5 @@
 <xsl:template match="atom:published|atom:updated">
 	<xsl:value-of select="."/>
 </xsl:template>
-
-<xsl:template name="prev-next" />
 
 </xsl:stylesheet>
