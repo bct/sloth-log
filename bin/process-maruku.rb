@@ -184,7 +184,6 @@ def get_entries(dir)
     entry = Atom::Entry.parse(File.read(file))
     mtime = entry.updated
 
-    puts entry.to_s if entry.slug
     entry.slug = File.basename(file)
 
     [mtime, entry]
