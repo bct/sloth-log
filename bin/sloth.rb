@@ -129,7 +129,7 @@ class Entries
     @es = []
     get_maruku_entries(maruku_dir) if maruku_dir
     get_atom_entries(atom_dir)     if atom_dir
-    @es.sort_by { |e| e.updated }
+    @es = @es.sort_by { |e| e.updated }
 
     @pages = paginate(Conf['entries per page'])
 
