@@ -151,7 +151,7 @@ class Entries
     end
   end
 
-  def get_atom_entries(maruku_dir)
+  def get_atom_entries(atom_dir)
     # load XML Atom entries
     Dir[atom_dir + '/*'].each do |file|
       entry = Atom::Entry.parse(File.read(file))
