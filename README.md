@@ -26,7 +26,7 @@ updated.
 
     # install the post-receive hook and configure sloth-log
     server$ git checkout
-    server$ cp bin/post-update >.git/hooks/
+    server$ cp bin/post-update .git/hooks/
     server$ $EDITOR config.yaml
 
     # test the configuration
