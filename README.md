@@ -58,7 +58,7 @@ Your /etc/mime.types should contain entries that map '.atom' =>
 `application/atom+xml` and '.xhtml' => `application/xhtml+xml`.
 
 There is [another Lua Lighttpd content negotiation script][lighttpd-conneg-2]
-that may be faster and easier to set up; I haven't tried it.
+that may be easier to set up and faster to respond; I haven't tried it.
 
 ## Use ##
 
