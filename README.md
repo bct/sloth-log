@@ -17,12 +17,56 @@ updated.
 
 ## Setup ##
 
-Edit `config.yaml`.
+    # make a new remote repository 'foo'
+    server$ mkdir foo; cd foo; git init
 
-XXX setup git hooks
-XXX setup conneg on webserver
+    # add a remote repository named 'site' and push the basics to it
+    laptop$ git remote add site server:foo
+    laptop$ git push site master
+
+    # install the post-receive hook and configure sloth-log
+    server$ git checkout
+    server$ cp bin/post-update >.git/hooks/
+    server$ $EDITOR config.yaml
+
+    # test the configuration
+    server$ ./bin/sloth
+    # check that it all went as expected
+    server$ git commit config.yaml
+
+    # add a new entry and publish it
+    laptop$ $EDITOR entries/hello-world; git commit
+    laptop$ git push site master
+
+## Content Negotiation ##
+
+In order for any of the generated links to work, your server needs to support
+content negotiation for Atom and (X)HTML.
+
+### Conneg with Lighttpd ###
+
+Lighttpd itself doesn't support content negotiation. It does support Lua though,
+and you can get conneg that way.
+
+[Michael Gorven][] has generously provided a script that is included with sloth-log.
+To install it, just copy bin/negotiate.lua somewhere and add this line to your
+lighttpd.conf:
+
+    magnet.attract-physical-path-to = ("somewhere/negotiate.lua")
+
+Your /etc/mime.types should contain entries that map '.atom' =>
+`application/atom+xml` and '.xhtml' => `application/xhtml+xml`.
+
+There is [another Lua Lighttpd content negotiation script][lighttpd-conneg-2]
+that may be faster and easier to set up; I haven't tried it.
 
 ## Use ##
 
-Add entries to your `maruku directory` (there's an example in there) and run
-`./bin/sloth`.
+Add Maruku entries to ./entries (there should already be an example in there).
+When you're ready to publish, commit your changes and `git push site`.
+
+If you don't want to deal with all of the `post-update` hook nonsense, you can
+just run `./bin/sloth` to generate the HTML.
+
+[Michael Gorven]: http://github.com/bct/sloth-log/tree/master
+[lighttpd-conneg-2]: http://redmine.lighttpd.net/projects/lighttpd/wiki/MigratingFromApache#MultiViews
